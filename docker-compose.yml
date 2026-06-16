@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  database:
+    image: postgres:15-alpine
+    container_name: securepariksha-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: securepariksha
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: securepariksha-api
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - DATABASE_URL=postgresql://postgres:postgres@database:5432/securepariksha?schema=public
+      - JWT_SECRET=super_secret_key_12345
+      - JWT_REFRESH_SECRET=super_secret_refresh_key_12345
+    depends_on:
+      - database
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: securepariksha-web
+    restart: always
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

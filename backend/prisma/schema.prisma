@@ -1,0 +1,206 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  users       User[]
+
+  @@map("roles")
+}
+
+model User {
+  id           String         @id @default(uuid())
+  email        String         @unique
+  passwordHash String         @map("password_hash")
+  roleId       String         @map("role_id")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+  role         Role           @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  admin        Admin?
+  student      Student?
+  notifications Notification[]
+  auditLogs    AuditLog[]
+
+  @@map("users")
+}
+
+model Admin {
+  id        String   @id @default(uuid())
+  userId    String   @unique @map("user_id")
+  name      String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exams     Exam[]
+
+  @@map("admins")
+}
+
+model Student {
+  id           String         @id @default(uuid())
+  userId       String         @unique @map("user_id")
+  name         String
+  rollNumber   String         @unique @map("roll_number")
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  examAttempts ExamAttempt[]
+
+  @@map("students")
+}
+
+model Exam {
+  id                String         @id @default(uuid())
+  name              String
+  description       String?
+  duration          Int            // in minutes
+  totalQuestions    Int            @map("total_questions")
+  passingPercentage Float          @map("passing_percentage")
+  startDate         DateTime       @map("start_date")
+  endDate           DateTime       @map("end_date")
+  status            String         // DRAFT, PUBLISHED, COMPLETED
+  creatorId         String         @map("creator_id")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+  creator           Admin          @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  examQuestions     ExamQuestion[]
+  examAttempts      ExamAttempt[]
+
+  @@map("exams")
+}
+
+model Question {
+  id              String           @id @default(uuid())
+  text            String
+  category        String
+  difficulty      String           // EASY, MEDIUM, HARD
+  marks           Int
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  questionOptions QuestionOption[]
+  examQuestions   ExamQuestion[]
+  studentAnswers  StudentAnswer[]
+
+  @@map("questions")
+}
+
+model QuestionOption {
+  id             String          @id @default(uuid())
+  questionId     String          @map("question_id")
+  text           String
+  isCorrect      Boolean         @map("is_correct")
+  question       Question        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  studentAnswers StudentAnswer[]
+
+  @@map("question_options")
+}
+
+model ExamQuestion {
+  examId     String   @map("exam_id")
+  questionId String   @map("question_id")
+  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@id([examId, questionId])
+  @@map("exam_questions")
+}
+
+model ExamAttempt {
+  id             String          @id @default(uuid())
+  studentId      String          @map("student_id")
+  examId         String          @map("exam_id")
+  status         String          // IN_PROGRESS, SUBMITTED, EVALUATED
+  startedAt      DateTime        @default(now()) @map("started_at")
+  completedAt    DateTime?       @map("completed_at")
+  score          Float?
+  percentage     Float?
+  isPassed       Boolean?        @map("is_passed")
+  violationCount Int             @default(0) @map("violation_count")
+  timeTaken      Int?            @map("time_taken") // in seconds
+  student        Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam           Exam            @relation(fields: [examId], references: [id], onDelete: Cascade)
+  studentAnswers StudentAnswer[]
+  result         Result?
+  violations     Violation[]
+  proctorLogs    ProctorLog[]
+
+  @@map("exam_attempts")
+}
+
+model StudentAnswer {
+  id               String      @id @default(uuid())
+  attemptId        String      @map("attempt_id")
+  questionId       String      @map("question_id")
+  selectedOptionId String      @map("selected_option_id")
+  isCorrect        Boolean     @map("is_correct")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  attempt          ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question         Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOption   QuestionOption @relation(fields: [selectedOptionId], references: [id], onDelete: Cascade)
+
+  @@map("student_answers")
+}
+
+model Result {
+  id             String      @id @default(uuid())
+  attemptId      String      @unique @map("attempt_id")
+  score          Float
+  percentage     Float
+  rank           Int?
+  isPassed       Boolean     @map("is_passed")
+  timeTaken      Int         @map("time_taken") // in seconds
+  violationCount Int         @map("violation_count")
+  generatedAt    DateTime    @default(now()) @map("generated_at")
+  attempt        ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@map("results")
+}
+
+model Violation {
+  id            String      @id @default(uuid())
+  attemptId     String      @map("attempt_id")
+  type          String      // FACE_MISSING, MULTIPLE_FACES, LOOKING_AWAY, FULLSCREEN_EXIT, TAB_SWITCH, COPY_ATTEMPT, PASTE_ATTEMPT, DEVTOOLS_OPEN
+  screenshotUrl String?     @map("screenshot_url")
+  timestamp     DateTime    @default(now())
+  riskScore     Int         @map("risk_score")
+  attempt       ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@map("violations")
+}
+
+model ProctorLog {
+  id        String      @id @default(uuid())
+  attemptId String      @map("attempt_id")
+  type      String
+  message   String
+  timestamp DateTime    @default(now())
+  attempt   ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@map("proctor_logs")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  message   String
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?  @map("user_id")
+  action    String
+  details   String
+  timestamp DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
